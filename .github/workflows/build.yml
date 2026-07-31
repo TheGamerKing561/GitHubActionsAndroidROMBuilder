@@ -1,0 +1,218 @@
+name: Build ROM
+
+on:
+  workflow_dispatch:
+    inputs:
+      lineage_manifest:
+        description: ROM manifest URL
+        default: https://github.com/LineageOS/android.git
+        required: true
+        type: string
+
+      branch:
+        description: ROM manifest branch
+        default: lineage-17.1
+        required: true
+        type: string
+
+      device:
+        description: Device codename
+        required: true
+        type: string
+
+      manifest_url:
+        description: Extra manifest XML URL
+        required: true
+        type: string
+
+      upload_repository:
+        description: owner/repository to upload the release to
+        required: true
+        type: string
+
+      zip_pattern:
+        description: ROM ZIP filename pattern
+        default: "lineage-*.zip"
+        required: false
+        type: string
+
+env:
+  TZ: UTC
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1440
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            bc \
+            bison \
+            build-essential \
+            ccache \
+            curl \
+            flex \
+            g++-multilib \
+            gcc-multilib \
+            git \
+            git-lfs \
+            gh \
+            gnupg \
+            gperf \
+            imagemagick \
+            protobuf-compiler \
+            python3-protobuf \
+            lib32readline-dev \
+            lib32z1-dev \
+            libdw-dev \
+            libelf-dev \
+            libgnutls28-dev \
+            lz4 \
+            libsdl1.2-dev \
+            libssl-dev \
+            libxml2 \
+            libxml2-utils \
+            lzop \
+            pngcrush \
+            rsync \
+            schedtool \
+            squashfs-tools \
+            xsltproc \
+            xxd \
+            zip \
+            zlib1g-dev
+
+      - name: Install repo tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "TheGamerKing"
+          git config --global user.email "eyadtamer2121@gmail.com"
+          git config --global trailer.changeid.key "Change-Id"
+
+      - name: Configure Git LFS
+        run: git lfs install
+
+      - name: Authenticate GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          echo "$GH_TOKEN" | gh auth login --with-token
+          gh auth status
+
+      - name: Initialize source
+        run: |
+          mkdir rom
+          cd rom
+
+          repo init \
+            -u "${{ inputs.lineage_manifest }}" \
+            -b "${{ inputs.branch }}" \
+            --git-lfs \
+            --depth=1
+
+      - name: Download local manifest
+        run: |
+          cd rom
+
+          mkdir -p .repo/local_manifests
+
+          curl -L "${{ inputs.manifest_url }}" \
+            -o .repo/local_manifests/extra.xml
+
+      - name: Sync sources
+        run: |
+          cd rom
+
+          repo sync \
+            -c \
+            -j"$(nproc --all)" \
+            --force-sync \
+            --no-clone-bundle \
+            --no-tags \
+            --optimized-fetch \
+            --prune
+
+      - name: Build ROM
+        shell: bash
+        run: |
+          cd rom
+
+          source build/envsetup.sh
+
+          breakfast "${{ inputs.device }}"
+          brunch "${{ inputs.device }}"
+
+      - name: Prepare release assets
+        id: prepare
+        shell: bash
+        run: |
+          cd rom
+
+          OUT=$(find out/target/product -mindepth 1 -maxdepth 1 -type d | head -n1)
+          cd "$OUT"
+
+          BUILD_PROP="system/build.prop"
+
+          ZIP=$(find . -maxdepth 1 -type f -name "${{ inputs.zip_pattern }}" | head -n1)
+
+          if [[ -z "$ZIP" ]]; then
+              echo "No ROM ZIP found."
+              exit 1
+          fi
+
+          BUILD_DATE=$(date +%Y-%m-%d)
+          TITLE_DATE=$(date +%Y%m%d)
+
+          BUILD_NUMBER=$(sed -n 's/^ro\.system\.build\.version\.incremental=//p' "$BUILD_PROP")
+          PATCH_LEVEL=$(sed -n 's/^ro\.build\.version\.security_patch=//p' "$BUILD_PROP")
+
+          FILES=("$ZIP")
+
+          {
+            echo "📅 Build date: $BUILD_DATE"
+            echo
+            echo "🔒 Security patch level: $PATCH_LEVEL"
+            echo
+            echo "## SHA256 sums"
+            echo
+            echo "\`$(sha256sum "$ZIP")\`" >> release_notes.md
+          } > release_notes.md
+
+          for img in boot.img recovery.img vbmeta.img dtbo.img vendor_boot.img init_boot.img super_empty.img; do
+            if [[ -f "$img" ]]; then
+              FILES+=("$img")
+              sha256sum "$img" >> release_notes.md
+            fi
+          done
+
+          printf "%s\n" "${FILES[@]}" > files.txt
+
+          echo "out_dir=$PWD" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "title_date=$TITLE_DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        shell: bash
+        run: |
+          cd "${{ steps.prepare.outputs.out_dir }}"
+
+          mapfile -t FILES < files.txt
+
+          gh release create \
+            "${{ inputs.device }}-${{ steps.prepare.outputs.build_number }}" \
+            "${FILES[@]}" \
+            -R "${{ inputs.upload_repository }}" \
+            --title "ROM for ${{ inputs.device }} (${{ steps.prepare.outputs.title_date }})" \
+            --notes-file release_notes.md
