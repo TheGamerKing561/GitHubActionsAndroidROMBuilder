@@ -112,7 +112,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          echo "$GH_TOKEN" > token.txt
+          echo "$GH_AUTH_TOKEN" > token.txt
           gh auth login --with-token < token.txt
           gh auth status
           gh auth setup-git
