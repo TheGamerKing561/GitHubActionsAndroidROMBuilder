@@ -42,9 +42,15 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 1440
 
     steps:
+
+      - name: Run cleanup
+        uses: justinthelaw/maximize-github-runner-space@latest
+
+      - name: Run second cleanup
+        uses: rokibhasansagar/slimhub_actions@main
+        
       - name: Install dependencies
         run: |
           sudo apt update
@@ -106,7 +112,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          echo "$GH_TOKEN" | gh auth login --with-token
+          echo "$GH_TOKEN" > token.txt
+          gh auth login --with-token < token.txt
+          gh auth status
+          gh auth setup-git
           gh auth status
 
       - name: Initialize source
