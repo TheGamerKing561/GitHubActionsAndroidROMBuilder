@@ -210,7 +210,7 @@ jobs:
 
           chmod +x run_build.sh
 
-          screen -dmS android-build bash -c './run_build.sh > build.log 2>&1; echo $? > build.exit'
+          screen -dmS android-build bash -c './run_build.sh 2>&1 | tee build.log; echo ${PIPESTATUS[0]} > build.exit'
 
           echo "Build started in screen session. Streaming logs..."
 
