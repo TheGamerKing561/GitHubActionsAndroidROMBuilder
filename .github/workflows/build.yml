@@ -162,12 +162,8 @@ jobs:
 
           cloudflared tunnel --url ssh://localhost:22 > cloudflare.log 2>&1 &
 
-          for i in {1..30}; do
-            if grep -q "trycloudflare.com" cloudflare.log; then
-              break
-            fi
-            sleep 1
-          done
+          sleep 15
+
           echo "=== SSH CONNECTION DETAILS ==="
           cat cloudflare.log
           echo "=============================="
@@ -218,6 +214,10 @@ jobs:
 
           echo "Build started in screen session. Streaming logs..."
 
+          while [[ ! -f build.log ]]; do
+            sleep 1
+          done
+          
           tail -f build.log &
           TAIL_PID=$!
 
