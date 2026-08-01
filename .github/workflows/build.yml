@@ -114,7 +114,6 @@ jobs:
         env:
           GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
         run: |
-          gh auth logout
           echo "$GH_AUTH_TOKEN" | gh auth login --with-token
           gh auth status
           gh auth setup-git
