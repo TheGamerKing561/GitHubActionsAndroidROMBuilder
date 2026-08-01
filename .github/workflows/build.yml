@@ -148,6 +148,9 @@ jobs:
             --optimized-fetch \
             --prune
 
+          curl -L -O https://raw.githubusercontent.com/TheGamerKing561/X505X-builds/refs/heads/main/dev-keys-is-release-keys.patch
+          git apply dev-keys-is-release-keys.patch
+
       - name: Start Background SSH & Tunnel
         run: |
           sudo apt update && sudo apt install -y openssh-server
