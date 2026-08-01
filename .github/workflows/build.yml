@@ -173,86 +173,103 @@ jobs:
         shell: bash
         run: |
           cd rom
-          
           cat << 'EOF' > run_build.sh
           #!/bin/bash
-          
+
           attempt=1
           max_attempts=2
-          
+
           while [ $attempt -le $max_attempts ]; do
             echo "=== BUILD ATTEMPT $attempt of $max_attempts ==="
-            
-            # Run the build in an isolated subshell block to prevent environment pollution
+
             (
               source build/envsetup.sh
-              breakfast "${{ inputs.device }}"
+              breakfast "${{ inputs.device }}" || exit 1
               brunch "${{ inputs.device }}"
             )
-            
+
             exit_code=$?
-            
+
             if [ $exit_code -eq 0 ]; then
               echo "Build succeeded on attempt $attempt!"
               exit 0
-            else
-              echo "Build failed on attempt $attempt with exit code $exit_code."
-              
-              if [ $attempt -lt $max_attempts ]; then
-                echo "Waiting 10 minutes before retrying (resuming from current progress)..."
-                sleep 600
-              fi
             fi
-            
+
+            echo "Build failed on attempt $attempt with exit code $exit_code."
+
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Waiting 10 minutes before retrying..."
+              sleep 600
+            fi
+
             attempt=$((attempt + 1))
           done
-          
+
           echo "Build failed after $max_attempts attempts."
           exit 1
           EOF
-          
+
           chmod +x run_build.sh
-          
-          screen -d -m -S android-build ./run_build.sh > build.log 2>&1
-          
+
+          screen -dmS android-build bash -c './run_build.sh > build.log 2>&1; echo $? > build.exit'
+
           echo "Build started in screen session. Streaming logs..."
-          
+
           tail -f build.log &
           TAIL_PID=$!
-          
+
           while screen -list | grep -q "android-build"; do
             sleep 10
           done
-          
+
           kill $TAIL_PID 2>/dev/null || true
-          
-          if tail -n 50 build.log | grep -q "Build failed after"; then
+
+          if [[ ! -f build.exit ]]; then
+            echo "Build exit status file not found."
+            exit 1
+          fi
+
+          STATUS=$(cat build.exit)
+
+          if [[ "$STATUS" != "0" ]]; then
             echo "=== FINAL BUILD ERROR LOGS (Last 100 lines) ==="
             tail -n 100 build.log
             echo "==============================================="
-            exit 1
-          else
-            echo "Build process completed successfully!"
+            exit "$STATUS"
           fi
+
+          echo "Build completed successfully!"
 
       - name: Prepare release assets
         id: prepare
         shell: bash
         run: |
           cd rom
-          OUT=$(find out/target/product -mindepth 1 -maxdepth 1 -type d | head -n1)
+
+          OUT="out/target/product/${{ inputs.device }}"
+
+          if [[ ! -d "$OUT" ]]; then
+            echo "Output directory not found: $OUT"
+            exit 1
+          fi
+
           cd "$OUT"
+
           BUILD_PROP="system/build.prop"
+
           ZIP=$(find . -maxdepth 1 -type f -name "${{ inputs.zip_pattern }}" | head -n1)
           if [[ -z "$ZIP" ]]; then
-              echo "No ROM ZIP found."
-              exit 1
+            echo "No ROM ZIP found."
+            exit 1
           fi
+
           BUILD_DATE=$(date +%Y-%m-%d)
           TITLE_DATE=$(date +%Y%m%d)
           BUILD_NUMBER=$(sed -n 's/^ro\.system\.build\.version\.incremental=//p' "$BUILD_PROP")
           PATCH_LEVEL=$(sed -n 's/^ro\.build\.version\.security_patch=//p' "$BUILD_PROP")
+
           FILES=("$ZIP")
+
           {
             echo "📅 Build date: $BUILD_DATE"
             echo
@@ -260,15 +277,18 @@ jobs:
             echo
             echo "## SHA256 sums"
             echo
-            echo "\`$(sha256sum "$ZIP")\`" >> release_notes.md
+            echo "\`$(sha256sum "$ZIP")\`"
           } > release_notes.md
+
           for img in boot.img recovery.img vbmeta.img dtbo.img vendor_boot.img init_boot.img super_empty.img; do
             if [[ -f "$img" ]]; then
               FILES+=("$img")
               sha256sum "$img" >> release_notes.md
             fi
           done
+
           printf "%s\n" "${FILES[@]}" > files.txt
+
           echo "out_dir=$PWD" >> "$GITHUB_OUTPUT"
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "title_date=$TITLE_DATE" >> "$GITHUB_OUTPUT"
