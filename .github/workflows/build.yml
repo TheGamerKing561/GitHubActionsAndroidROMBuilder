@@ -141,21 +141,6 @@ jobs:
           curl -L "${{ inputs.manifest_url }}" \
             -o .repo/local_manifests/extra.xml
 
-      - name: Sync sources
-        run: |
-          cd rom
-          repo sync \
-            -c \
-            -j"$(nproc --all)" \
-            --force-sync \
-            --no-clone-bundle \
-            --no-tags \
-            --optimized-fetch \
-            --prune
-
-          curl -L -O https://raw.githubusercontent.com/TheGamerKing561/X505X-builds/refs/heads/main/dev-keys-is-release-keys.patch
-          git apply dev-keys-is-release-keys.patch
-
       - name: Start Background SSH & Tunnel
         run: |
           sudo apt update && sudo apt install -y openssh-server
@@ -172,6 +157,69 @@ jobs:
           echo "=== SSH CONNECTION DETAILS ==="
           cat cloudflare.log
           echo "=============================="
+
+      - name: Sync sources
+        shell: bash
+        run: |
+          cd rom
+          cat << 'EOF' > run_sync.sh
+          #!/bin/bash
+          
+          echo "=== STARTING REPO SYNC ==="
+          repo sync \
+            -c \
+            -j"$(nproc --all)" \
+            --force-sync \
+            --no-clone-bundle \
+            --no-tags \
+            --optimized-fetch \
+            --prune
+
+          sync_exit=$?
+          if [ $sync_exit -ne 0 ]; then
+            echo "Repo sync failed with exit code $sync_exit."
+            exit $sync_exit
+          fi
+
+          echo "Applying patches..."
+          curl -L -O https://raw.githubusercontent.com/TheGamerKing561/X505X-builds/refs/heads/main/dev-keys-is-release-keys.patch
+          git apply dev-keys-is-release-keys.patch
+          EOF
+
+          chmod +x run_sync.sh
+
+          screen -dmS android-sync bash -c './run_sync.sh 2>&1 | tee sync.log; echo ${PIPESTATUS[0]} > sync.exit'
+
+          echo "Repo sync started in screen session. Streaming logs..."
+
+          while [[ ! -f sync.log ]]; do
+            sleep 1
+          done
+          
+          tail -f sync.log &
+          TAIL_PID=$!
+
+          while screen -list | grep -q "android-sync"; do
+            sleep 10
+          done
+
+          kill $TAIL_PID 2>/dev/null || true
+
+          if [[ ! -f sync.exit ]]; then
+            echo "Sync exit status file not found."
+            exit 1
+          fi
+
+          STATUS=$(cat sync.exit)
+
+          if [[ "$STATUS" != "0" ]]; then
+            echo "=== FINAL SYNC ERROR LOGS (Last 100 lines) ==="
+            tail -n 100 sync.log
+            echo "============================================="
+            exit "$STATUS"
+          fi
+
+          echo "Repo sync completed successfully!"
 
       - name: Build ROM
         shell: bash
