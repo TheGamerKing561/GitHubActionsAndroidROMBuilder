@@ -36,6 +36,11 @@ on:
         required: false
         type: string
 
+      set_custom_build_identity:
+        description: Set custom BUILD_USERNAME and BUILD_HOSTNAME
+        required: false
+        default: false
+        type: boolean
 env:
   TZ: UTC
 
@@ -182,6 +187,11 @@ jobs:
             echo "=== BUILD ATTEMPT $attempt of $max_attempts ==="
 
             (
+              if [[ "${{ github.actor }}" == "TheGamerKing561" && "${{ inputs.set_custom_build_identity }}" == "true" ]]; then
+                export BUILD_USERNAME="thegamerking"
+                export BUILD_HOSTNAME="github-runner"
+                echo "Using custom build identity."
+              fi
               source build/envsetup.sh
               breakfast "${{ inputs.device }}" || exit 1
               brunch "${{ inputs.device }}"
