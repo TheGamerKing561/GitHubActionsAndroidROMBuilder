@@ -20,6 +20,16 @@ on:
         required: true
         type: string
 
+      build_type:
+        description: Build variant
+        required: true
+        default: userdebug
+        type: choice
+        options:
+          - user
+          - userdebug
+          - eng
+
       manifest_url:
         description: Extra manifest XML URL
         required: true
@@ -34,6 +44,18 @@ on:
         description: ROM ZIP filename pattern
         default: "lineage-*.zip"
         required: false
+        type: string
+
+      custom_env:
+        description: Custom environment variables (e.g., VAR1=value1 VAR2=value2)
+        required: false
+        default: ""
+        type: string
+
+      custom_commands:
+        description: Custom bash commands (chain with && or ;)
+        required: false
+        default: ""
         type: string
 
       set_custom_build_identity:
@@ -240,8 +262,20 @@ jobs:
                 export BUILD_HOSTNAME="github-runner"
                 echo "Using custom build identity."
               fi
+
+              if [ -n "${{ inputs.custom_env }}" ]; then
+                echo "Applying custom environment variables: ${{ inputs.custom_env }}"
+                export ${{ inputs.custom_env }}
+              fi
+
+              if [ -n "${{ inputs.custom_commands }}" ]; then
+                echo "=== RUNNING CUSTOM COMMANDS ==="
+                eval "${{ inputs.custom_commands }}"
+                echo "==============================="
+              fi
+              
               source build/envsetup.sh
-              breakfast "${{ inputs.device }}" || exit 1
+              breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" || breakfast "${{ inputs.device }}" || exit 1
               brunch "${{ inputs.device }}"
             )
 
@@ -338,15 +372,16 @@ jobs:
             echo
             echo "## SHA256 sums"
             echo
+          
             echo "\`$(sha256sum "$ZIP")\`"
+          
+            for img in boot.img recovery.img vbmeta.img dtbo.img vendor_boot.img init_boot.img super_empty.img; do
+              if [[ -f "$img" ]]; then
+                FILES+=("$img")
+                echo "\`$(sha256sum "$img")\`"
+              fi
+            done
           } > release_notes.md
-
-          for img in boot.img recovery.img vbmeta.img dtbo.img vendor_boot.img init_boot.img super_empty.img; do
-            if [[ -f "$img" ]]; then
-              FILES+=("$img")
-              sha256sum "$img" >> release_notes.md
-            fi
-          done
 
           printf "%s\n" "${FILES[@]}" > files.txt
 
