@@ -205,7 +205,13 @@ jobs:
 
           echo "Applying patches..."
           curl -L -O https://raw.githubusercontent.com/TheGamerKing561/X505X-builds/refs/heads/main/dev-keys-is-release-keys.patch
-          git apply dev-keys-is-release-keys.patch
+
+          if git apply dev-keys-is-release-keys.patch; then
+           echo "Patch applied successfully."
+          else
+            echo "Warning: Patch failed to apply. Continuing anyway."
+          fi
+
           EOF
 
           chmod +x run_sync.sh
