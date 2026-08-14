@@ -203,15 +203,6 @@ jobs:
             exit $sync_exit
           fi
 
-          echo "Applying patches..."
-          curl -L -O https://raw.githubusercontent.com/TheGamerKing561/X505X-builds/refs/heads/main/dev-keys-is-release-keys.patch
-
-          if git apply dev-keys-is-release-keys.patch; then
-           echo "Patch applied successfully."
-          else
-            echo "Warning: Patch failed to apply. Continuing anyway."
-          fi
-
           EOF
 
           chmod +x run_sync.sh
@@ -279,7 +270,8 @@ jobs:
                 eval "${{ inputs.custom_commands }}"
                 echo "==============================="
               fi
-              
+
+              cd $GITHUB_WORKSPACE/rom
               source build/envsetup.sh
               breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" || breakfast "${{ inputs.device }}" || exit 1
               brunch "${{ inputs.device }}"
