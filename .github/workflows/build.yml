@@ -77,11 +77,6 @@ jobs:
       - name: Run second cleanup
         uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 1
-
       - name: Install dependencies
         run: |
           sudo apt update
@@ -244,6 +239,10 @@ jobs:
           fi
 
           echo "Repo sync completed successfully!"
+
+          echo "Deleting unneeded .repo folder to free up some storage..."
+          rm -rf $GITHUB_WORKSPACE/rom/.repo
+          echo "Done!"
 
       - name: Build ROM
         shell: bash
