@@ -257,6 +257,8 @@ jobs:
               if [[ "${{ github.actor }}" == "TheGamerKing561" && "${{ inputs.set_custom_build_identity }}" == "true" ]]; then
                 export BUILD_USERNAME="thegamerking"
                 export BUILD_HOSTNAME="github-runner"
+                export KBUILD_BUILD_USER="thegamerking"
+                export KBUILD_BUILD_HOST="github-runner"
                 echo "Using custom build identity."
               fi
 
