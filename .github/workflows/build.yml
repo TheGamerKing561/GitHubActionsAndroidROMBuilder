@@ -240,10 +240,6 @@ jobs:
 
           echo "Repo sync completed successfully!"
 
-          echo "Deleting unneeded .repo folder to free up some storage..."
-          rm -rf $GITHUB_WORKSPACE/rom/.repo
-          echo "Done!"
-
       - name: Build ROM
         shell: bash
         run: |
@@ -276,6 +272,9 @@ jobs:
               fi
 
               cd $GITHUB_WORKSPACE/rom
+              echo "Deleting unneeded .repo folder to free up some storage..."
+              rm -rf "$GITHUB_WORKSPACE/rom/.repo"
+              echo "Done!"
               source build/envsetup.sh
               breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" || breakfast "${{ inputs.device }}" || exit 1
               brunch "${{ inputs.device }}"
