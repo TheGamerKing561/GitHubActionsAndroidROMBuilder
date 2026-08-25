@@ -1,4 +1,4 @@
-name: Build ROM
+name: Build ROM - Test
 
 on:
   workflow_dispatch:
