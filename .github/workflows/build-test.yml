@@ -90,7 +90,6 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-
       - name: Run cleanup
         uses: justinthelaw/maximize-github-runner-space@main
 
@@ -490,7 +489,49 @@ jobs:
 
               echo "=========================================="
               echo "4 HOURS 50 MINUTES REACHED"
+              echo "KILLING BUILD"
               echo "=========================================="
+
+              # ----------------------------------------------------------
+              # Kill the screen session running the ROM build
+              # ----------------------------------------------------------
+
+              if screen -list | grep -q "android-build"; then
+                echo "Stopping android-build screen session..."
+                screen -S android-build -X quit || true
+              else
+                echo "android-build screen session is already gone."
+              fi
+
+              # ----------------------------------------------------------
+              # Kill any remaining run_build.sh process
+              # ----------------------------------------------------------
+
+              echo "Looking for remaining run_build.sh processes..."
+
+              pkill -TERM -f "$GITHUB_WORKSPACE/rom/run_build.sh" || true
+
+              sleep 5
+
+              # ----------------------------------------------------------
+              # Force kill anything that survived
+              # ----------------------------------------------------------
+
+              pkill -KILL -f "$GITHUB_WORKSPACE/rom/run_build.sh" || true
+
+              echo "Build process termination completed."
+
+              # ----------------------------------------------------------
+              # Show remaining relevant processes
+              # ----------------------------------------------------------
+
+              echo "=== Remaining build processes ==="
+              pgrep -af "run_build.sh|build/envsetup.sh|brunch|make|ninja|mka" || true
+              echo "================================="
+
+              # ----------------------------------------------------------
+              # Dispatch helper
+              # ----------------------------------------------------------
 
               TUNNEL_HOST="${{ steps.tunnel.outputs.tunnel_host }}"
 
