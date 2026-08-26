@@ -472,7 +472,7 @@ jobs:
 
             echo "Parent cancellation requested."
 
-            sleep 10
+            exit 0
 
           # ==========================================================
           # NORMAL MODE - START HANDOFF WATCHDOG
@@ -491,6 +491,12 @@ jobs:
               echo "4 HOURS 50 MINUTES REACHED"
               echo "KILLING BUILD"
               echo "=========================================="
+
+              # ----------------------------------------------------------
+              # Mark intentional handoff before killing the build
+              # ----------------------------------------------------------
+
+              touch "$GITHUB_WORKSPACE/handoff_requested"
 
               # ----------------------------------------------------------
               # Kill the screen session running the ROM build
@@ -606,6 +612,21 @@ jobs:
           kill $TAIL_PID 2>/dev/null || true
 
           if [[ ! -f build.exit ]]; then
+
+            if [[ -f "$GITHUB_WORKSPACE/handoff_requested" ]]; then
+              echo "=========================================="
+              echo "BUILD STOPPED FOR HANDOFF"
+              echo "Waiting for helper workflow to download rom/out..."
+              echo "=========================================="
+
+              # The helper will cancel this workflow after
+              # successfully downloading rom/out.
+
+              while true; do
+                sleep 30
+              done
+            fi
+
             echo "Build exit status file not found."
             exit 1
           fi
