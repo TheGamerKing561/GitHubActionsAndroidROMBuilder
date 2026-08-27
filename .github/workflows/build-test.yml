@@ -383,7 +383,7 @@ jobs:
           echo "Parent cancellation requested."
 
           # Update all downloaded out file timestamps to 'now' so they look newer than the source code
-          find "$GITHUB_WORKSPACE/rom/out" -type f -exec touch {} +
+          find "$GITHUB_WORKSPACE/rom/out" -type f -exec touch -h {} +
 
           echo "=========================================="
           echo "Helper out download complete."
