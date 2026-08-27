@@ -64,6 +64,12 @@ on:
         default: false
         type: boolean
 
+      handoff_seconds:
+        description: Seconds before handing off the build to a new runner
+        required: false
+        default: 17400
+        type: number
+      
       helper:
         description: Internal helper-run flag
         required: false
@@ -172,19 +178,6 @@ jobs:
           gh auth status
 
       - name: Initialize source
-        if: inputs.helper == false
-        run: |
-          mkdir rom
-          cd rom
-
-          repo init \
-            -u "${{ inputs.lineage_manifest }}" \
-            -b "${{ inputs.branch }}" \
-            --git-lfs \
-            --depth=1
-
-      - name: Initialize helper source
-        if: inputs.helper == true
         run: |
           mkdir rom
           cd rom
@@ -237,7 +230,6 @@ jobs:
           echo "tunnel_host=$TUNNEL_HOST" >> "$GITHUB_OUTPUT"
 
       - name: Sync sources
-        if: inputs.helper == false
         shell: bash
         run: |
           cd rom
@@ -299,20 +291,103 @@ jobs:
 
           echo "Repo sync completed successfully!"
 
-      - name: Helper sync sources
+      - name: Helper - Download out folder
         if: inputs.helper == true
         shell: bash
         run: |
-          cd rom
+          echo "=========================================="
+          echo "HELPER - DOWNLOAD OUT FOLDER"
+          echo "Parent run: ${{ inputs.parent_run_id }}"
+          echo "Parent tunnel: ${{ inputs.parent_tunnel }}"
+          echo "=========================================="
 
-          repo sync \
-            -c \
-            -j"$(nproc --all)" \
-            --force-sync \
-            --no-clone-bundle \
-            --no-tags \
-            --optimized-fetch \
-            --prune
+          # ----------------------------------------------------------
+          # Connect to parent SSH through Cloudflare
+          # ----------------------------------------------------------
+          cloudflared access tcp \
+            --hostname "${{ inputs.parent_tunnel }}" \
+            --url localhost:2222 \
+            > "$GITHUB_WORKSPACE/cloudflared-access.log" 2>&1 &
+
+          CLOUDFLARED_PID=$!
+
+          cleanup_cloudflared() {
+            kill "$CLOUDFLARED_PID" 2>/dev/null || true
+          }
+
+          trap cleanup_cloudflared EXIT
+
+          echo "Waiting for localhost:2222..."
+
+          for i in {1..60}; do
+            if (echo > /dev/tcp/127.0.0.1/2222) >/dev/null 2>&1; then
+              echo "Cloudflare TCP connection ready."
+              break
+            fi
+
+            if ! kill -0 "$CLOUDFLARED_PID" 2>/dev/null; then
+              echo "cloudflared exited unexpectedly."
+              cat "$GITHUB_WORKSPACE/cloudflared-access.log"
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          if ! (echo > /dev/tcp/127.0.0.1/2222) >/dev/null 2>&1; then
+            echo "Timed out waiting for Cloudflare TCP connection."
+            cat "$GITHUB_WORKSPACE/cloudflared-access.log"
+            exit 1
+          fi
+
+          # ----------------------------------------------------------
+          # Download parent's rom/out
+          # ----------------------------------------------------------
+          echo "=========================================="
+          echo "Downloading parent rom/out..."
+          echo "=========================================="
+
+          export SSHPASS="${{ secrets.userpassword }}"
+
+          mkdir -p "$GITHUB_WORKSPACE/rom/out"
+
+          sshpass -e rsync \
+            -avh \
+            --info=progress2 \
+            --partial \
+            -e "ssh \
+              -p 2222 \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=30" \
+            runner@127.0.0.1:/home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/rom/out/ \
+            "$GITHUB_WORKSPACE/rom/out/"
+
+          echo "=========================================="
+          echo "rom/out successfully downloaded."
+          echo "=========================================="
+
+          if [[ ! -d "$GITHUB_WORKSPACE/rom/out" ]]; then
+            echo "ERROR: out directory was not downloaded."
+            exit 1
+          fi
+
+          # ----------------------------------------------------------
+          # Cancel parent after out has been downloaded
+          # ----------------------------------------------------------
+          echo "Stopping parent workflow..."
+
+          gh run cancel "${{ inputs.parent_run_id }}" \
+            --repo "${{ github.repository }}"
+
+          echo "Parent cancellation requested."
+
+          echo "=========================================="
+          echo "Helper out download complete."
+          echo "Parent workflow cancelled."
+          echo "Continuing to Build ROM..."
+          echo "=========================================="
+
 
       - name: Build ROM
         shell: bash
@@ -348,13 +423,20 @@ jobs:
                 echo "==============================="
               fi
 
-              cd $GITHUB_WORKSPACE/rom
+              cd "$GITHUB_WORKSPACE/rom"
+
               echo "Deleting unneeded .repo folder to free up some storage..."
               rm -rf "$GITHUB_WORKSPACE/rom/.repo"
               echo "Done!"
 
+              echo "=== STARTING ROM BUILD ==="
+
               source build/envsetup.sh
-              breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" || breakfast "${{ inputs.device }}" || exit 1
+
+              breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" \
+                || breakfast "${{ inputs.device }}" \
+                || exit 1
+
               brunch "${{ inputs.device }}"
             )
 
@@ -382,209 +464,138 @@ jobs:
           chmod +x run_build.sh
 
           # ==========================================================
-          # HELPER MODE
+          # START HANDOFF WATCHDOG
           # ==========================================================
 
-          if [[ "${{ inputs.helper }}" == "true" ]]; then
+          echo "Starting 4h50m handoff watchdog..."
+
+          (
+            echo "Handoff watchdog PID: $$"
+          
+            HANDOFF_SECONDS="${{ inputs.handoff_seconds }}"
+          
+            echo "Handoff timeout: ${HANDOFF_SECONDS} seconds"
+          
+            sleep "$HANDOFF_SECONDS"
+          
+            echo "=========================================="
+            echo "HANDOFF TIME REACHED"
+            echo "=========================================="
+
+            # ------------------------------------------------------
+            # Mark intentional handoff
+            # ------------------------------------------------------
+            touch "$GITHUB_WORKSPACE/handoff_requested"
+
+            # ------------------------------------------------------
+            # Kill the screen session running the ROM build
+            # ------------------------------------------------------
+            if screen -list | grep -q "android-build"; then
+              echo "Stopping android-build screen session..."
+              screen -S android-build -X quit || true
+            else
+              echo "android-build screen session is already gone."
+            fi
+
+            # ------------------------------------------------------
+            # Kill run_build.sh
+            # ------------------------------------------------------
+            echo "Looking for remaining run_build.sh processes..."
+
+            pkill -TERM \
+              -f "$GITHUB_WORKSPACE/rom/run_build.sh" \
+              || true
+
+            sleep 5
+
+            # ------------------------------------------------------
+            # Force kill anything that survived
+            # ------------------------------------------------------
+            pkill -KILL \
+              -f "$GITHUB_WORKSPACE/rom/run_build.sh" \
+              || true
+
+            echo "Build process termination completed."
+
+            # ------------------------------------------------------
+            # Show remaining relevant processes
+            # ------------------------------------------------------
+            echo "=== Remaining build processes ==="
+
+            pgrep -af \
+              "run_build.sh|build/envsetup.sh|brunch|make|ninja|mka" \
+              || true
+
+            echo "================================="
+
+            # ------------------------------------------------------
+            # Get tunnel hostname
+            # ------------------------------------------------------
+            TUNNEL_HOST="${{ steps.tunnel.outputs.tunnel_host }}"
+
+            if [[ -z "$TUNNEL_HOST" ]]; then
+              echo "ERROR: Tunnel hostname is empty."
+              exit 1
+            fi
+
+            echo "Dispatching helper workflow..."
+            echo "Tunnel: $TUNNEL_HOST"
+
+            # ------------------------------------------------------
+            # Dispatch helper
+            # ------------------------------------------------------
+            gh workflow run "${{ github.workflow }}" \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
+            -f lineage_manifest="${{ inputs.lineage_manifest }}" \
+            -f branch="${{ inputs.branch }}" \
+            -f device="${{ inputs.device }}" \
+            -f build_type="${{ inputs.build_type }}" \
+            -f manifest_url="${{ inputs.manifest_url }}" \
+            -f upload_repository="${{ inputs.upload_repository }}" \
+            -f zip_pattern="${{ inputs.zip_pattern }}" \
+            -f custom_env="${{ inputs.custom_env }}" \
+            -f custom_commands="${{ inputs.custom_commands }}" \
+            -f set_custom_build_identity="${{ inputs.set_custom_build_identity }}" \
+            -f handoff_seconds="${{ inputs.handoff_seconds }}" \
+            -f helper=true \
+            -f parent_run_id="${{ github.run_id }}" \
+            -f parent_tunnel="$TUNNEL_HOST"
 
             echo "=========================================="
-            echo "HELPER MODE"
-            echo "Parent run: ${{ inputs.parent_run_id }}"
-            echo "Parent tunnel: ${{ inputs.parent_tunnel }}"
+            echo "HELPER WORKFLOW DISPATCHED"
             echo "=========================================="
 
-            cloudflared access tcp \
-              --hostname "${{ inputs.parent_tunnel }}" \
-              --url localhost:2222 \
-              > "$GITHUB_WORKSPACE/cloudflared-access.log" 2>&1 &
-
-            CLOUDFLARED_PID=$!
-
-            cleanup_cloudflared() {
-              kill "$CLOUDFLARED_PID" 2>/dev/null || true
-            }
-
-            trap cleanup_cloudflared EXIT
-
-            echo "Waiting for localhost:2222..."
-
-            for i in {1..60}; do
-              if (echo > /dev/tcp/127.0.0.1/2222) >/dev/null 2>&1; then
-                echo "Cloudflare TCP connection ready."
-                break
-              fi
-
-              if ! kill -0 "$CLOUDFLARED_PID" 2>/dev/null; then
-                echo "cloudflared exited unexpectedly."
-                cat "$GITHUB_WORKSPACE/cloudflared-access.log"
-                exit 1
-              fi
-
-              sleep 2
+            # ------------------------------------------------------
+            # Keep parent alive.
+            #
+            # The helper will:
+            #   1. Download rom/out
+            #   2. Cancel this workflow
+            # ------------------------------------------------------
+            while true; do
+              sleep 30
             done
 
-            if ! (echo > /dev/tcp/127.0.0.1/2222) >/dev/null 2>&1; then
-              echo "Timed out waiting for Cloudflare TCP connection."
-              cat "$GITHUB_WORKSPACE/cloudflared-access.log"
-              exit 1
-            fi
+          ) &
 
-            echo "=========================================="
-            echo "Downloading parent rom/out..."
-            echo "=========================================="
+          WATCHDOG_PID=$!
 
-            export SSHPASS="${{ secrets.userpassword }}"
+          echo "$WATCHDOG_PID" \
+            > "$GITHUB_WORKSPACE/handoff_watchdog.pid"
 
-            mkdir -p "$GITHUB_WORKSPACE/rom/out"
-
-            sshpass -e rsync \
-              -avh \
-              --info=progress2 \
-              --partial \
-              -e "ssh \
-                -p 2222 \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=30" \
-              runner@127.0.0.1:/home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/rom/out/ \
-              "$GITHUB_WORKSPACE/rom/out/"
-
-            echo "=========================================="
-            echo "rom/out successfully downloaded."
-            echo "=========================================="
-
-            if [[ ! -d "$GITHUB_WORKSPACE/rom/out" ]]; then
-              echo "ERROR: out directory was not downloaded."
-              exit 1
-            fi
-
-            echo "Stopping parent workflow..."
-
-            gh run cancel "${{ inputs.parent_run_id }}" \
-              --repo "${{ github.repository }}"
-
-            echo "Parent cancellation requested."
-
-            exit 0
+          echo "Handoff watchdog started with PID $WATCHDOG_PID."
 
           # ==========================================================
-          # NORMAL MODE - START HANDOFF WATCHDOG
-          # ==========================================================
+          # COMMON BUILD EXECUTION
 
-          else
-
-            echo "Starting 4h50m handoff watchdog..."
-
-            (
-              echo "Handoff watchdog PID: $$"
-
-              sleep 17400
-
-              echo "=========================================="
-              echo "4 HOURS 50 MINUTES REACHED"
-              echo "KILLING BUILD"
-              echo "=========================================="
-
-              # ----------------------------------------------------------
-              # Mark intentional handoff before killing the build
-              # ----------------------------------------------------------
-
-              touch "$GITHUB_WORKSPACE/handoff_requested"
-
-              # ----------------------------------------------------------
-              # Kill the screen session running the ROM build
-              # ----------------------------------------------------------
-
-              if screen -list | grep -q "android-build"; then
-                echo "Stopping android-build screen session..."
-                screen -S android-build -X quit || true
-              else
-                echo "android-build screen session is already gone."
-              fi
-
-              # ----------------------------------------------------------
-              # Kill any remaining run_build.sh process
-              # ----------------------------------------------------------
-
-              echo "Looking for remaining run_build.sh processes..."
-
-              pkill -TERM -f "$GITHUB_WORKSPACE/rom/run_build.sh" || true
-
-              sleep 5
-
-              # ----------------------------------------------------------
-              # Force kill anything that survived
-              # ----------------------------------------------------------
-
-              pkill -KILL -f "$GITHUB_WORKSPACE/rom/run_build.sh" || true
-
-              echo "Build process termination completed."
-
-              # ----------------------------------------------------------
-              # Show remaining relevant processes
-              # ----------------------------------------------------------
-
-              echo "=== Remaining build processes ==="
-              pgrep -af "run_build.sh|build/envsetup.sh|brunch|make|ninja|mka" || true
-              echo "================================="
-
-              # ----------------------------------------------------------
-              # Dispatch helper
-              # ----------------------------------------------------------
-
-              TUNNEL_HOST="${{ steps.tunnel.outputs.tunnel_host }}"
-
-              if [[ -z "$TUNNEL_HOST" ]]; then
-                echo "ERROR: Tunnel hostname is empty."
-                exit 1
-              fi
-
-              echo "Dispatching helper workflow..."
-              echo "Tunnel: $TUNNEL_HOST"
-
-              gh workflow run "${{ github.workflow }}" \
-                --repo "${{ github.repository }}" \
-                --ref "${{ github.ref_name }}" \
-                -f lineage_manifest="${{ inputs.lineage_manifest }}" \
-                -f branch="${{ inputs.branch }}" \
-                -f device="${{ inputs.device }}" \
-                -f build_type="${{ inputs.build_type }}" \
-                -f manifest_url="${{ inputs.manifest_url }}" \
-                -f upload_repository="${{ inputs.upload_repository }}" \
-                -f zip_pattern="${{ inputs.zip_pattern }}" \
-                -f custom_env="${{ inputs.custom_env }}" \
-                -f custom_commands="${{ inputs.custom_commands }}" \
-                -f set_custom_build_identity="${{ inputs.set_custom_build_identity }}" \
-                -f helper=true \
-                -f parent_run_id="${{ github.run_id }}" \
-                -f parent_tunnel="$TUNNEL_HOST"
-
-              echo "=========================================="
-              echo "HELPER WORKFLOW DISPATCHED"
-              echo "=========================================="
-
-              # The helper will cancel this workflow after
-              # successfully downloading rom/out.
-
-              while true; do
-                sleep 30
-              done
-
-            ) &
-
-            WATCHDOG_PID=$!
-
-            echo "$WATCHDOG_PID" > "$GITHUB_WORKSPACE/handoff_watchdog.pid"
-
-            echo "Handoff watchdog started with PID $WATCHDOG_PID."
-
-          fi
-
-          # ==========================================================
-          # NORMAL BUILD
-          # ==========================================================
+          echo "=========================================="
+          echo "STARTING RUN_BUILD.SH"
+          echo "=========================================="
 
           chmod +x run_build.sh
+
+          rm -f build.log build.exit
 
           screen -dmS android-build \
             bash -c './run_build.sh 2>&1 | tee build.log; echo ${PIPESTATUS[0]} > build.exit'
@@ -602,18 +613,28 @@ jobs:
             sleep 10
           done
 
-          kill $TAIL_PID 2>/dev/null || true
+          kill "$TAIL_PID" 2>/dev/null || true
+
+          # ==========================================================
+          # HANDLE BUILD EXIT
+          # ==========================================================
 
           if [[ ! -f build.exit ]]; then
 
+            # --------------------------------------------------------
+            # Parent build was intentionally stopped for handoff.
+            # --------------------------------------------------------
             if [[ -f "$GITHUB_WORKSPACE/handoff_requested" ]]; then
+
               echo "=========================================="
               echo "BUILD STOPPED FOR HANDOFF"
-              echo "Waiting for helper workflow to download rom/out..."
               echo "=========================================="
 
-              # The helper will cancel this workflow after
-              # successfully downloading rom/out.
+              echo "Waiting for helper workflow to:"
+              echo "  1. Download rom/out"
+              echo "  2. Cancel this workflow"
+              echo
+              echo "Parent workflow will remain alive until cancelled."
 
               while true; do
                 sleep 30
@@ -630,10 +651,13 @@ jobs:
             echo "=== FINAL BUILD ERROR LOGS (Last 100 lines) ==="
             tail -n 100 build.log
             echo "==============================================="
+
             exit "$STATUS"
           fi
 
+          echo "=========================================="
           echo "Build completed successfully!"
+          echo "=========================================="
 
       - name: Prepare release assets
         id: prepare
