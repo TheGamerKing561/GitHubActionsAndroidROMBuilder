@@ -473,7 +473,7 @@ jobs:
           # START HANDOFF WATCHDOG
           # ==========================================================
 
-          echo "Starting 4h50m handoff watchdog..."
+          echo "Starting handoff watchdog..."
 
           (
             echo "Handoff watchdog PID: $$"
