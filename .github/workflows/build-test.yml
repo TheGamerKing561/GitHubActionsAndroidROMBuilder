@@ -479,7 +479,12 @@ jobs:
             echo "Handoff watchdog PID: $$"
           
             HANDOFF_SECONDS="${{ inputs.handoff_seconds }}"
-          
+
+            if [[ "${{ inputs.helper }}" == "true" ]]; then
+              HANDOFF_SECONDS=$((HANDOFF_SECONDS - 3600))
+              echo "Helper workflow detected — reducing handoff timeout by 3600 seconds."
+            fi
+            
             echo "Handoff timeout: ${HANDOFF_SECONDS} seconds"
           
             sleep "$HANDOFF_SECONDS"
