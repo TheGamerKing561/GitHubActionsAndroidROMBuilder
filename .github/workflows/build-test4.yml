@@ -187,6 +187,7 @@ jobs:
         run: git lfs install
 
       - name: Authenticate GitHub CLI
+        if: inputs.role == 'main' || inputs.role == 'builder'
         env:
           GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
         run: |
