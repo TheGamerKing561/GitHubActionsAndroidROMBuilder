@@ -448,11 +448,16 @@ jobs:
           sudo pkill nbd-server 2>/dev/null || true
 
           sudo nbd-server \
-            -C /etc/nbd-server/config \
-            -d
+            -C /etc/nbd-server/config
 
           sleep 3
 
+          echo "=== NBD server status ==="
+          pgrep -a nbd-server || true
+          
+          echo "=== NBD listening sockets ==="
+          sudo ss -lntp | grep -E '10809|nbd-server' || true
+          
           TS_IP=$(tailscale ip -4)
 
           if [[ -z "$TS_IP" ]]; then
