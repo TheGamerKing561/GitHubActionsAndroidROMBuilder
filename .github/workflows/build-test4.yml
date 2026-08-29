@@ -567,6 +567,10 @@ jobs:
 
           df -h /storage/android-out/out
 
+          echo "Fixing permissions...:
+          sudo chown runner:runner /storage/android-out/out
+          ls -l /storage/android-out/out
+
       - name: Builder - Start handoff timer
         if: inputs.role == 'builder'
         shell: bash
@@ -785,17 +789,17 @@ jobs:
 
               export OUT_DIR="/storage/android-out/out"
 
-              echo "Deleting unneeded .repo folder to free up some storage..."
-              rm -rf "$GITHUB_WORKSPACE/rom/.repo"
-              echo "Done!"
-
               echo "=== STARTING ROM BUILD ==="
 
               source build/envsetup.sh
-
+              
               breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" \
                 || breakfast "${{ inputs.device }}" \
                 || exit 1
+
+              echo "Deleting unneeded .repo folder to free up some storage..."
+              rm -rf "$GITHUB_WORKSPACE/rom/.repo"
+              echo "Done!"
 
               brunch "${{ inputs.device }}"
             )
