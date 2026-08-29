@@ -567,7 +567,7 @@ jobs:
 
           df -h /storage/android-out/out
 
-          echo "Fixing permissions...:
+          echo "Fixing permissions..."
           sudo chown runner:runner /storage/android-out/out
           ls -l /storage/android-out/out
 
