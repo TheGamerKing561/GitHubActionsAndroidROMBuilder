@@ -64,6 +64,11 @@ on:
         default: false
         type: boolean
 
+      SWAP_SIZE:
+        description: "Swap size (GB)"
+        required: true
+        default: "16"
+
       handoff_seconds:
         description: Seconds before handing off the build to a new runner
         required: false
@@ -115,7 +120,7 @@ jobs:
       - name: Swap Space
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 16
+          swap-size-gb: ${{ inputs.SWAP_SIZE }}
 
       - name: Install ROM build dependencies
         if: inputs.role == 'main' || inputs.role == 'builder'
