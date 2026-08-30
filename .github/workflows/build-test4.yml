@@ -115,7 +115,7 @@ jobs:
       - name: Swap Space
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 24
+          swap-size-gb: 16
 
       - name: Install ROM build dependencies
         if: inputs.role == 'main' || inputs.role == 'builder'
