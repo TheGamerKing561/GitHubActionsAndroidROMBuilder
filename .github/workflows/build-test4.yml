@@ -393,6 +393,8 @@ jobs:
           echo "=========================================="
 
           sudo mkdir -p /storage/android-out
+          sudo chown -R runner:runner /storage/android-out
+          sudo chmod 755 /storage/android-out
 
           OUT_IMG=/storage/android-out/out.img
 
