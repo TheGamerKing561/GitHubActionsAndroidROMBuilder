@@ -1027,6 +1027,8 @@ jobs:
           echo "Build completed successfully!"
           echo "=========================================="
 
+          df -h
+
       - name: Prepare release assets
         id: prepare
         if: inputs.role == 'main' || inputs.role == 'builder'
