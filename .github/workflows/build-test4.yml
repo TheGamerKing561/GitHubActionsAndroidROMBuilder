@@ -119,6 +119,7 @@ jobs:
 
       - name: Swap Space
         uses: pierotofy/set-swap-space@master
+        if: inputs.role == 'main' || inputs.role == 'builder'
         with:
           swap-size-gb: ${{ inputs.SWAP_SIZE }}
 
