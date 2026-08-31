@@ -1262,9 +1262,9 @@ jobs:
         if: inputs.role == 'main' || inputs.role == 'builder'
         shell: bash
         run: |
-          cd rom
+          cd /storage/android-out/out
 
-          OUT="out/target/product/${{ inputs.device }}"
+          OUT="target/product/${{ inputs.device }}"
 
           if [[ ! -d "$OUT" ]]; then
             echo "Output directory not found: $OUT"
