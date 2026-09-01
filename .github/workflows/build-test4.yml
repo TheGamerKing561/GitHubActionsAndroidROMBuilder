@@ -72,7 +72,7 @@ on:
 
       ROM_SIZE:
         description: ROM image size (GB)
-        required: true
+        required: false
         default: 105
         type: number
 
@@ -1172,7 +1172,7 @@ jobs:
             fi
 
             pkill -TERM \
-              -f "$GITHUB_WORKSPACE/rom/run_build.sh" \
+              -f "/storage/android-rom/rom/run_build.sh" \
               || true
 
             sleep 5
