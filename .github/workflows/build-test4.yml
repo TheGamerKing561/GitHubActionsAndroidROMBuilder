@@ -334,7 +334,7 @@ jobs:
             -f custom_env="${{ inputs.custom_env }}" \
             -f custom_commands="${{ inputs.custom_commands }}" \
             -f set_custom_build_identity="${{ inputs.set_custom_build_identity }}" \
-            -f SWAP_SIZE="8"
+            -f SWAP_SIZE="8" \
             -f handoff_seconds="${{ inputs.handoff_seconds }}" \
             -f role=out \
             -f parent_run_id="${{ github.run_id }}" \
@@ -1091,7 +1091,7 @@ jobs:
               -f custom_env="${{ inputs.custom_env }}" \
               -f custom_commands="${{ inputs.custom_commands }}" \
               -f set_custom_build_identity="${{ inputs.set_custom_build_identity }}" \
-              -f SWAP_SIZE="${{ inputs.SWAP_SIZE }}"
+              -f SWAP_SIZE="${{ inputs.SWAP_SIZE }}" \
               -f handoff_seconds="${{ inputs.handoff_seconds }}" \
               -f role=builder \
               -f parent_run_id="${{ github.run_id }}" \
