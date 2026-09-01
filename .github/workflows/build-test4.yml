@@ -1103,14 +1103,8 @@ jobs:
 
             for i in {1..60}; do
               BUILDER_RUN_ID=$(
-                sshpass -e ssh \
-                  -p 22 \
-                  -o StrictHostKeyChecking=no \
-                  -o UserKnownHostsFile=/dev/null \
-                  runner@"$PARENT_TS_IP" \
-                  "cat /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/builder_${HANDOFF_ID} 2>/dev/null || true" \
-                  2>/dev/null || true
-              )
+               cat "$GITHUB_WORKSPACE/builder_${HANDOFF_ID}" 2>/dev/null || true
+             )
 
               BUILDER_RUN_ID=$(echo "$BUILDER_RUN_ID" | tr -d '[:space:]')
 
@@ -1135,13 +1129,7 @@ jobs:
 
             for i in {1..60}; do
               BUILDER_TS_IP=$(
-                sshpass -e ssh \
-                  -p 22 \
-                  -o StrictHostKeyChecking=no \
-                  -o UserKnownHostsFile=/dev/null \
-                  runner@"$PARENT_TS_IP" \
-                  "cat /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/builder_${HANDOFF_ID}_ip 2>/dev/null || true" \
-                  2>/dev/null || true
+               cat "$GITHUB_WORKSPACE/builder_${HANDOFF_ID}_ip" 2>/dev/null || true
               )
 
               BUILDER_TS_IP=$(echo "$BUILDER_TS_IP" | tr -d '[:space:]')
