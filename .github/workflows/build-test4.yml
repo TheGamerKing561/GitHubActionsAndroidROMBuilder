@@ -805,25 +805,14 @@ jobs:
 
           for i in {1..180}; do
             CURRENT_OUT_IP=$(
-              sshpass -e ssh \
-                -p 22 \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                runner@"$PARENT_TS_IP" \
-                "cat /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/out_runner_ip 2>/dev/null || true" \
-                2>/dev/null || true
+              cat "$GITHUB_WORKSPACE/out_runner_ip" 2>/dev/null || true
             )
+
 
             CURRENT_OUT_IP=$(echo "$CURRENT_OUT_IP" | tr -d '[:space:]')
 
             CURRENT_OUT_RUN_ID=$(
-              sshpass -e ssh \
-                -p 22 \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                runner@"$PARENT_TS_IP" \
-                "cat /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/out_runner_run_id 2>/dev/null || true" \
-                2>/dev/null || true
+              cat "$GITHUB_WORKSPACE/out_runner_run_id" 2>/dev/null || true
             )
 
             CURRENT_OUT_RUN_ID=$(echo "$CURRENT_OUT_RUN_ID" | tr -d '[:space:]')
