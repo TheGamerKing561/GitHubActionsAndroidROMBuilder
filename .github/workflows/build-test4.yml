@@ -43,7 +43,7 @@ on:
       zip_pattern:
         description: ROM ZIP filename pattern
         default: "lineage-*.zip"
-        required: false
+        required: true
         type: string
 
       custom_env:
