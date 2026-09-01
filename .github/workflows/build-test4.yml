@@ -1101,7 +1101,7 @@ jobs:
 
             BUILDER_RUN_ID=""
 
-            for i in {1..60}; do
+            for i in {1..300}; do
               BUILDER_RUN_ID=$(
                cat "$GITHUB_WORKSPACE/builder_${HANDOFF_ID}" 2>/dev/null || true
              )
