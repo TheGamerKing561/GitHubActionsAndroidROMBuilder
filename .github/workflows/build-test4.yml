@@ -3,13 +3,13 @@ name: Build ROM - Test4
 on:
   workflow_dispatch:
     inputs:
-      lineage_manifest:
+      rom_manifest:
         description: ROM manifest URL
         default: https://github.com/LineageOS/android.git
         required: true
         type: string
 
-      branch:
+      rom_manifest_branch:
         description: ROM manifest branch
         default: lineage-17.1
         required: true
@@ -68,6 +68,12 @@ on:
         description: Swap size (GB)
         required: true
         default: 16
+        type: number
+
+      ROM_SIZE:
+        description: ROM image size (GB)
+        required: true
+        default: 105
         type: number
 
       handoff_seconds:
@@ -290,22 +296,84 @@ jobs:
           chmod +x ~/bin/repo
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
+      - name: Create and mount ROM image
+        if: inputs.role == 'main'
+        shell: bash
+        run: |
+          set -e
+
+          ROM_ROOT="/storage/android-rom"
+          ROM_IMG="$ROM_ROOT/rom.img"
+          ROM_MOUNT="$ROM_ROOT/rom"
+
+          echo "=========================================="
+          echo "CREATING ROM IMAGE"
+          echo "=========================================="
+
+          sudo mkdir -p "$ROM_ROOT"
+
+          # ROM source sparse image
+          sudo truncate -s "${{ inputs.ROM_SIZE }}G" "$ROM_IMG"
+
+          echo "Formatting ext4 filesystem..."
+          sudo mkfs.ext4 -F \
+            -m 0 \
+            "$ROM_IMG"
+
+          sudo mkdir -p "$ROM_MOUNT"
+
+          sudo mount \
+            -o loop \
+            "$ROM_IMG" \
+            "$ROM_MOUNT"
+
+          sudo chown runner:runner "$ROM_MOUNT"
+
+          echo
+          echo "ROM image:"
+          ls -lh "$ROM_IMG"
+
+          echo
+          echo "ROM filesystem:"
+          df -h "$ROM_MOUNT"
+
+          echo
+          echo "Actual image disk usage:"
+          sudo du -h "$ROM_IMG"
+
+          echo
+          echo "ROM mount:"
+          mount | grep "$ROM_MOUNT"
+
+          echo "=========================================="
+          echo "ROM IMAGE READY"
+          echo "=========================================="
+
+      
       - name: Initialize source
         if: inputs.role == 'main'
         run: |
-          mkdir rom
-          cd rom
+          set -e
+
+          ROM_DIR="/storage/android-rom/rom"
+
+          cd "$ROM_DIR"
 
           repo init \
-            -u "${{ inputs.lineage_manifest }}" \
-            -b "${{ inputs.branch }}" \
+            -u "${{ inputs.rom_manifest }}" \
+            -b "${{ inputs.rom_manifest_branch }}" \
             --git-lfs \
             --depth=1
 
       - name: Download local manifest
         if: inputs.role == 'main'
         run: |
-          cd rom
+          set -e
+
+          ROM_DIR="/storage/android-rom/rom"
+
+          cd "$ROM_DIR"
+
           mkdir -p .repo/local_manifests
 
           curl -L "${{ inputs.manifest_url }}" \
@@ -324,8 +392,8 @@ jobs:
           gh workflow run "${{ github.workflow }}" \
             --repo "${{ github.repository }}" \
             --ref "${{ github.ref_name }}" \
-            -f lineage_manifest="${{ inputs.lineage_manifest }}" \
-            -f branch="${{ inputs.branch }}" \
+            -f rom_manifest="${{ inputs.rom_manifest }}" \
+            -f rom_manifest_branch="${{ inputs.rom_manifest_branch }}" \
             -f device="${{ inputs.device }}" \
             -f build_type="${{ inputs.build_type }}" \
             -f manifest_url="${{ inputs.manifest_url }}" \
@@ -346,7 +414,7 @@ jobs:
         if: inputs.role == 'main'
         shell: bash
         run: |
-          cd rom
+          cd /storage/android-rom/rom
 
           cat << 'EOF' > run_sync.sh
           #!/bin/bash
@@ -447,7 +515,7 @@ jobs:
             echo "INITIAL OUT RUNNER"
             echo "=========================================="
 
-            sudo truncate -s 120G "$OUT_IMG"
+            sudo truncate -s 125G "$OUT_IMG"
             sudo mkfs.ext4 -F "$OUT_IMG"
 
           fi
@@ -748,6 +816,10 @@ jobs:
             exit 1
           fi
 
+          # ==========================================================
+          # TEST TAILSCALE
+          # ==========================================================
+
           echo "=========================================="
           echo "TESTING TAILSCALE CONNECTION"
           echo "=========================================="
@@ -757,13 +829,15 @@ jobs:
             "$PARENT_TS_IP"; then
 
             echo "ERROR: Cannot reach parent runner over Tailscale."
-            echo
-            echo "=== TAILSCALE STATUS ==="
             tailscale status || true
             exit 1
           fi
 
           echo "Tailscale connection OK."
+
+          # ==========================================================
+          # TEST SSH
+          # ==========================================================
 
           echo "=========================================="
           echo "TESTING SSH CONNECTION"
@@ -777,37 +851,91 @@ jobs:
             runner@"$PARENT_TS_IP" \
             "echo 'SSH over Tailscale works.'"
 
-          mkdir -p "$GITHUB_WORKSPACE/rom"
+          # ==========================================================
+          # DOWNLOAD ROM IMAGE
+          # ==========================================================
 
           echo "=========================================="
-          echo "DOWNLOADING ROM DIRECTORY"
+          echo "DOWNLOADING ROM IMAGE"
           echo "=========================================="
+
+          sudo mkdir -p /storage/android-rom
 
           sshpass -e rsync \
-            -avh \
-            --info=progress2 \
+            -ah \
+            --sparse \
             --partial \
+            --inplace \
+            --info=progress2 \
             -e "ssh \
               -p 22 \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=30" \
-            runner@"$PARENT_TS_IP":/home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/rom/ \
-            "$GITHUB_WORKSPACE/rom/"
+            runner@"$PARENT_TS_IP":/storage/android-rom/rom.img \
+            /storage/android-rom/rom.img
+
+          echo "ROM image transfer complete."
+
+          echo
+          echo "ROM image:"
+          ls -lh /storage/android-rom/rom.img
+
+          echo
+          echo "Actual allocated size:"
+          sudo du -h /storage/android-rom/rom.img
+
+          echo
+          echo "Logical size:"
+          sudo du --apparent-size -h /storage/android-rom/rom.img
+
+          # ==========================================================
+          # MOUNT ROM IMAGE
+          # ==========================================================
+
+          echo "=========================================="
+          echo "MOUNTING ROM IMAGE"
+          echo "=========================================="
+
+          sudo mkdir -p /storage/android-rom/rom
+
+          sudo mount \
+            -o loop \
+            /storage/android-rom/rom.img \
+            /storage/android-rom/rom
+
+          sudo chown runner:runner /storage/android-rom/rom
+
+          echo
+          echo "ROM filesystem:"
+          df -h /storage/android-rom/rom
+
+          echo
+          echo "ROM mount:"
+          mount | grep "/storage/android-rom/rom"
+
+          echo "ROM image mounted successfully."
+
+          # ==========================================================
+          # WAIT FOR NEW OUT RUNNER
+          # ==========================================================
 
           OLD_OUT_IP="${{ inputs.old_out_ip }}"
 
+          echo "=========================================="
+          echo "WAITING FOR NEW OUT RUNNER"
+          echo "=========================================="
+
           echo "Old OUT IP: $OLD_OUT_IP"
-          echo "Waiting for new OUT runner..."
 
           NEW_OUT_IP=""
           NEW_OUT_RUN_ID=""
 
           for i in {1..180}; do
+
             CURRENT_OUT_IP=$(
               cat "$GITHUB_WORKSPACE/out_runner_ip" 2>/dev/null || true
             )
-
 
             CURRENT_OUT_IP=$(echo "$CURRENT_OUT_IP" | tr -d '[:space:]')
 
@@ -841,15 +969,22 @@ jobs:
             exit 1
           fi
 
-          echo "$NEW_OUT_IP" > "$GITHUB_WORKSPACE/out_runner_ip"
-          echo "$NEW_OUT_RUN_ID" > "$GITHUB_WORKSPACE/out_runner_run_id"
+          echo "$NEW_OUT_IP" \
+            > "$GITHUB_WORKSPACE/out_runner_ip"
+
+          echo "$NEW_OUT_RUN_ID" \
+            > "$GITHUB_WORKSPACE/out_runner_run_id"
 
           echo "New OUT runner IP: $NEW_OUT_IP"
           echo "New OUT workflow ID: $NEW_OUT_RUN_ID"
 
           echo "=========================================="
-          echo "BUILDER TRANSFER COMPLETE"
+          echo "OUT RUNNER SWITCH COMPLETE"
           echo "=========================================="
+
+          # ==========================================================
+          # CALCULATE REMAINING HANDOFF TIME
+          # ==========================================================
 
           START_TIME=$(cat "$GITHUB_WORKSPACE/builder_handoff_start")
           NOW=$(date +%s)
@@ -861,25 +996,47 @@ jobs:
             REMAINING=0
           fi
 
+          if [[ "$REMAINING" -le 0 ]]; then
+            echo "ERROR: Builder used all handoff time before the build could start."
+            exit 1
+          fi
+
           echo "Configured handoff time: ${{ inputs.handoff_seconds }} seconds"
           echo "Time spent transferring/switching: ${ELAPSED} seconds"
           echo "Remaining builder time: ${REMAINING} seconds"
 
-          echo "$REMAINING" > "$GITHUB_WORKSPACE/remaining_handoff_seconds"
+          echo "$REMAINING" \
+            > "$GITHUB_WORKSPACE/remaining_handoff_seconds"
 
-          echo "Stopping parent workflow..."
+          # ==========================================================
+          # STOP PARENT
+          # ==========================================================
 
-          gh run cancel "${{ inputs.parent_run_id }}" \
+          echo "=========================================="
+          echo "STOPPING PARENT WORKFLOW"
+          echo "=========================================="
+
+          gh run cancel \
+            "${{ inputs.parent_run_id }}" \
             --repo "${{ github.repository }}"
 
           echo "Parent cancellation requested."
+
+          # ==========================================================
+          # FINAL STATUS
+          # ==========================================================
 
           echo "=========================================="
           echo "BUILDER WORKSPACE READY"
           echo "=========================================="
 
-          pwd
-          ls -la "$GITHUB_WORKSPACE/rom/"
+          echo
+          echo "ROM source:"
+          ls -la /storage/android-rom/rom/
+
+          echo
+          echo "ROM filesystem:"
+          df -h /storage/android-rom/rom
 
       - name: Builder - Connect to OUT storage
         if: inputs.role == 'builder'
@@ -912,7 +1069,7 @@ jobs:
         if: inputs.role == 'main' || inputs.role == 'builder'
         shell: bash
         run: |
-          cd rom
+          cd /storage/android-rom/rom
 
           cat << 'EOF' > run_build.sh
           #!/bin/bash
@@ -943,7 +1100,7 @@ jobs:
                 echo "==============================="
               fi
 
-              cd "$GITHUB_WORKSPACE/rom"
+              cd /storage/android-rom/rom
 
               export OUT_DIR="/storage/android-out/out"
 
@@ -954,10 +1111,6 @@ jobs:
               breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" \
                 || breakfast "${{ inputs.device }}" \
                 || exit 1
-
-              echo "Deleting unneeded .repo folder to free up some storage..."
-              rm -rf "$GITHUB_WORKSPACE/rom/.repo"
-              echo "Done!"
 
               brunch "${{ inputs.device }}"
             )
@@ -1032,10 +1185,18 @@ jobs:
 
             sudo sync || true
 
+            echo "Unmounting ROM image..."
+            
+            sudo umount \
+              /storage/android-rom/rom \
+              || true
+            
+            echo "Unmounting OUT storage..."
+            
             sudo umount \
               /storage/android-out/out \
               || true
-
+            
             sudo nbd-client \
               -d /dev/nbd0 \
               || true
@@ -1070,8 +1231,8 @@ jobs:
             gh workflow run "${{ github.workflow }}" \
               --repo "${{ github.repository }}" \
               --ref "${{ github.ref_name }}" \
-              -f lineage_manifest="${{ inputs.lineage_manifest }}" \
-              -f branch="${{ inputs.branch }}" \
+              -f rom_manifest="${{ inputs.rom_manifest }}" \
+              -f rom_manifest_branch="${{ inputs.rom_manifest_branch }}" \
               -f device="${{ inputs.device }}" \
               -f build_type="${{ inputs.build_type }}" \
               -f manifest_url="${{ inputs.manifest_url }}" \
@@ -1148,8 +1309,8 @@ jobs:
             gh workflow run "${{ github.workflow }}" \
               --repo "${{ github.repository }}" \
               --ref "${{ github.ref_name }}" \
-              -f lineage_manifest="${{ inputs.lineage_manifest }}" \
-              -f branch="${{ inputs.branch }}" \
+              -f rom_manifest="${{ inputs.rom_manifest }}" \
+              -f rom_manifest_branch="${{ inputs.rom_manifest_branch }}" \
               -f device="${{ inputs.device }}" \
               -f build_type="${{ inputs.build_type }}" \
               -f manifest_url="${{ inputs.manifest_url }}" \
