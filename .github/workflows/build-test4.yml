@@ -1290,7 +1290,7 @@ jobs:
                 break
               fi
 
-              echo "Waiting for Builder Tailscale IP... ($i/30)"
+              echo "Waiting for Builder Tailscale IP... ($i/300)"
               sleep 2
             done
 
