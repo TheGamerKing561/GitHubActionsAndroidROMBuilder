@@ -112,6 +112,7 @@ on:
 
 env:
   TZ: UTC
+  SSHPASS: ${{ secrets.userpassword }}
 
 jobs:
   build:
@@ -407,8 +408,6 @@ jobs:
       - name: Setup OUT storage server
         if: inputs.role == 'out'
         shell: bash
-        env:
-          SSHPASS: ${{ secrets.userpassword }}
         run: |
           set -e
 
