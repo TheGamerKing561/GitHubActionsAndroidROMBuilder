@@ -868,18 +868,16 @@ jobs:
           sudo mkdir -p /storage/android-rom
 
           sshpass -e rsync \
-            -ah \
-            --sparse \
-            --partial \
-            --inplace \
-            --info=progress2 \
-            -e "ssh \
-              -p 22 \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=30" \
-            runner@"$PARENT_TS_IP":/storage/android-rom/rom.img \
-            /storage/android-rom/rom.img
+              -ah \
+              --sparse \
+              --partial \
+              --info=progress2 \
+              -e "ssh \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=30" \
+              runner@"$PARENT_TS_IP":/storage/android-rom/rom.img \
+              /storage/android-rom/rom.img
 
           echo "ROM image transfer complete."
 
