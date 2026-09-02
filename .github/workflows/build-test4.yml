@@ -61,7 +61,7 @@ on:
       build_command:
         description: ROM build command
         required: false
-        default: 'source build/envsetup.sh && breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" && brunch "${{ inputs.device }}"'
+        default: 'source build/envsetup.sh && breakfast "$DEVICE" "$BUILD_TYPE" && brunch "$DEVICE"'
         type: string
       
       set_custom_build_identity:
@@ -1109,6 +1109,8 @@ jobs:
               cd /storage/android-rom/rom
 
               export OUT_DIR="/storage/android-out/out"
+              export DEVICE='${{ inputs.device }}'
+              export BUILD_TYPE='${{ inputs.build_type }}'
               export BUILD_COMMAND='${{ inputs.build_command }}'
 
               echo "=== STARTING ROM BUILD ==="
