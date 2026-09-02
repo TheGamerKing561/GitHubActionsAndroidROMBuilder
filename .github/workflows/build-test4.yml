@@ -1175,10 +1175,10 @@ jobs:
               -f "/storage/android-rom/rom/run_build.sh" \
               || true
 
-            sleep 5
+            sleep 15
 
             pkill -KILL \
-              -f "$GITHUB_WORKSPACE/rom/run_build.sh" \
+              -f "/storage/android-rom/rom/run_build.sh" \
               || true
 
             echo "Build process termination completed."
