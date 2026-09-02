@@ -326,6 +326,8 @@ jobs:
             -m 0 \
             "$ROM_IMG"
 
+          sudo chown runner:runner "$ROM_IMG"
+          
           sudo mkdir -p "$ROM_MOUNT"
 
           sudo mount \
