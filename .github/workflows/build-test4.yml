@@ -318,6 +318,8 @@ jobs:
 
           sudo mkdir -p "$ROM_ROOT"
 
+          sudo chown runner:runner "$ROM_ROOT"
+
           # ROM source sparse image
           sudo truncate -s "${{ inputs.ROM_SIZE }}G" "$ROM_IMG"
 
@@ -868,6 +870,8 @@ jobs:
           echo "=========================================="
 
           sudo mkdir -p /storage/android-rom
+
+          sudo chown runner:runner /storage/android-rom
 
           sshpass -e rsync \
               -ah \
