@@ -53,11 +53,17 @@ on:
         type: string
 
       custom_commands:
-        description: Custom bash commands (chain with && or ;)
+        description: Custom bash commands to run before build (chain with && or ;)
         required: false
         default: ""
         type: string
 
+      build_command:
+        description: ROM build command
+        required: false
+        default: 'source build/envsetup.sh && breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" && brunch "${{ inputs.device }}"'
+        type: string
+      
       set_custom_build_identity:
         description: Set custom BUILD_USERNAME and BUILD_HOSTNAME
         required: false
@@ -1103,16 +1109,16 @@ jobs:
               cd /storage/android-rom/rom
 
               export OUT_DIR="/storage/android-out/out"
+              export BUILD_COMMAND='${{ inputs.build_command }}'
 
               echo "=== STARTING ROM BUILD ==="
 
-              source build/envsetup.sh
+              echo "=== RUNNING BUILD COMMAND ==="
+              echo "Build command: $BUILD_COMMAND"
+              echo "====================================="
+              
+              eval "$BUILD_COMMAND"
 
-              breakfast "${{ inputs.device }}" "${{ inputs.build_type }}" \
-                || breakfast "${{ inputs.device }}" \
-                || exit 1
-
-              brunch "${{ inputs.device }}"
             )
 
             exit_code=$?
