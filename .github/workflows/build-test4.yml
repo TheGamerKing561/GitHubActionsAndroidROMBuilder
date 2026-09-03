@@ -941,7 +941,7 @@ jobs:
           NEW_OUT_IP=""
           NEW_OUT_RUN_ID=""
 
-          for i in {1..180}; do
+          for i in {1..240}; do
 
             CURRENT_OUT_IP=$(
               cat "$GITHUB_WORKSPACE/out_runner_ip" 2>/dev/null || true
@@ -965,7 +965,7 @@ jobs:
               break
             fi
 
-            echo "New OUT runner not ready yet... ($i/180)"
+            echo "New OUT runner not ready yet... ($i/240)"
             sleep 5
           done
 
