@@ -1060,6 +1060,20 @@ jobs:
           echo "=========================================="
 
           # ==========================================================
+          # STOP PARENT
+          # ==========================================================
+
+          echo "=========================================="
+          echo "STOPPING PARENT WORKFLOW"
+          echo "=========================================="
+
+          gh run cancel \
+            "${{ inputs.parent_run_id }}" \
+            --repo "${{ github.repository }}"
+
+          echo "Parent cancellation requested."
+
+          # ==========================================================
           # CALCULATE REMAINING HANDOFF TIME
           # ==========================================================
 
@@ -1084,20 +1098,6 @@ jobs:
 
           echo "$REMAINING" \
             > "$GITHUB_WORKSPACE/remaining_handoff_seconds"
-
-          # ==========================================================
-          # STOP PARENT
-          # ==========================================================
-
-          echo "=========================================="
-          echo "STOPPING PARENT WORKFLOW"
-          echo "=========================================="
-
-          gh run cancel \
-            "${{ inputs.parent_run_id }}" \
-            --repo "${{ github.repository }}"
-
-          echo "Parent cancellation requested."
 
           # ==========================================================
           # FINAL STATUS
