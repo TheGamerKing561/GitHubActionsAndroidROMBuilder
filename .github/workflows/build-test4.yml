@@ -468,7 +468,11 @@ jobs:
           # Always show disk usage, even if this step exits with an error.
           cleanup() {
             echo ""
-            echo "=== ROM DIRECTORY SIZE ==="
+            echo "=== ROM SUBDIRECTORY SIZES ==="
+            du -sh /storage/android-rom/rom/*/ 2>/dev/null | sort -h || true
+
+            echo ""
+            echo "=== TOTAL ROM DIRECTORY SIZE ==="
             du -sh /storage/android-rom/rom || true
 
             echo ""
