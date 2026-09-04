@@ -63,7 +63,7 @@ on:
         required: false
         default: 'source build/envsetup.sh && breakfast "$DEVICE" "$BUILD_TYPE" && brunch "$DEVICE"'
         type: string
-      
+
       set_custom_build_identity:
         description: Set custom BUILD_USERNAME and BUILD_HOSTNAME
         required: false
@@ -329,7 +329,7 @@ jobs:
             "$ROM_IMG"
 
           sudo chown runner:runner "$ROM_IMG"
-          
+
           sudo mkdir -p "$ROM_MOUNT"
 
           sudo mount \
@@ -359,7 +359,42 @@ jobs:
           echo "ROM IMAGE READY"
           echo "=========================================="
 
-      
+      - name: Setup ROM NBD server
+        if: inputs.role == 'main'
+        shell: bash
+        run: |
+          set -e
+
+          ROM_IMG="/storage/android-rom/rom.img"
+
+          sudo modprobe nbd max_part=8
+
+
+          sudo tee /etc/nbd-server/config >/dev/null <<EOF
+          [generic]
+              user = runner
+              group = runner
+              listenaddr = 0.0.0.0
+
+          [android-rom]
+              exportname = $ROM_IMG
+              flush = true
+              trim = true
+          EOF
+
+          sudo pkill nbd-server 2>/dev/null || true
+
+          sudo nbd-server \
+            -C /etc/nbd-server/config
+
+          sleep 3
+
+          echo "=== ROM NBD server ==="
+
+          sudo ss -lntp | grep 10809 || true
+
+          echo "ROM export ready"
+
       - name: Initialize source
         if: inputs.role == 'main'
         run: |
@@ -508,17 +543,34 @@ jobs:
             echo "Old OUT runner:"
             echo "${{ inputs.old_out_ip }}"
 
-            sshpass -e rsync \
-              -ah \
-              --sparse \
-              --partial \
-              --info=progress2 \
-              -e "ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=30" \
-              runner@${{ inputs.old_out_ip }}:/storage/android-out/out.img \
-              "$OUT_IMG"
+            echo "=========================================="
+            echo "DOWNLOADING OLD OUT IMAGE VIA NBD"
+            echo "=========================================="
+            
+            sudo modprobe nbd max_part=8
+
+            sudo nbd-client \
+              "${{ inputs.old_out_ip }}" \
+              10809 \
+              /dev/nbd1 \
+              -N android-out
+
+            echo "Copying OUT image..."
+
+            sudo truncate -s 125G "$OUT_IMG"
+
+            sudo dd \
+              if=/dev/nbd1 \
+              of="$OUT_IMG" \
+              bs=16M \
+              status=progress \
+              conv=sparse
+
+            echo "Disconnecting old OUT..."
+
+            sudo nbd-client \
+              -d \
+              /dev/nbd1
 
           else
             echo "=========================================="
@@ -789,8 +841,6 @@ jobs:
           echo "BUILDER REGISTRATION COMPLETE"
           echo "=========================================="
 
-
-      
       - name: Builder - Start handoff timer
         if: inputs.role == 'builder'
         shell: bash
@@ -873,17 +923,34 @@ jobs:
 
           sudo chown runner:runner /storage/android-rom
 
-          sshpass -e rsync \
-              -ah \
-              --sparse \
-              --partial \
-              --info=progress2 \
-              -e "ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=30" \
-              runner@"$PARENT_TS_IP":/storage/android-rom/rom.img \
-              /storage/android-rom/rom.img
+          echo "=========================================="
+          echo "DOWNLOADING ROM IMAGE VIA NBD"
+          echo "=========================================="
+
+          sudo modprobe nbd max_part=8
+
+          sudo nbd-client \
+            "$PARENT_TS_IP" \
+            10809 \
+            /dev/nbd2 \
+            -N android-rom
+
+          echo "Copying ROM image..."
+
+          sudo truncate -s "${{ inputs.ROM_SIZE }}G" /storage/android-rom/rom.img
+          
+          sudo dd \
+            if=/dev/nbd2 \
+            of=/storage/android-rom/rom.img \
+            bs=16M \
+            status=progress \
+            conv=sparse
+
+          echo "Disconnecting ROM NBD..."
+
+          sudo nbd-client \
+            -d \
+            /dev/nbd2
 
           echo "ROM image transfer complete."
 
