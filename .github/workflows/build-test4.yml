@@ -1200,7 +1200,9 @@ jobs:
 
               cd /storage/android-rom/rom
 
-              export OUT_DIR="/storage/android-out/out"
+              rm -rf /storage/android-rom/rom/out 
+              ln -s /storage/android-out/out /storage/android-rom/rom/out
+              
               export DEVICE='${{ inputs.device }}'
               export BUILD_TYPE='${{ inputs.build_type }}'
               export BUILD_COMMAND='${{ inputs.build_command }}'
