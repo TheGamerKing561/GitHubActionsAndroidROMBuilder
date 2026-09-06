@@ -1169,6 +1169,7 @@ jobs:
         env:
           CUSTOM_ENV: ${{ inputs.custom_env }}
           CUSTOM_COMMANDS: ${{ inputs.custom_commands }}
+          BUILD_COMMAND_INPUT: ${{ inputs.build_command }}
         run: |
           cd /storage/android-rom/rom
 
@@ -1191,8 +1192,8 @@ jobs:
               fi
 
               if [ -n "$CUSTOM_ENV" ]; then
-                echo "Applying custom environment variables: ${{ inputs.custom_env }}"
-                export "$CUSTOM_ENV"
+                echo "Applying custom environment variables: $CUSTOM_ENV"
+                export $CUSTOM_ENV
               fi
 
               if [ -n "$CUSTOM_COMMANDS" ]; then
@@ -1208,7 +1209,7 @@ jobs:
               
               export DEVICE='${{ inputs.device }}'
               export BUILD_TYPE='${{ inputs.build_type }}'
-              export BUILD_COMMAND='${{ inputs.build_command }}'
+              export BUILD_COMMAND='$BUILD_COMMAND_INPUT'
 
               echo "=== STARTING ROM BUILD ==="
 
