@@ -1590,7 +1590,7 @@ jobs:
             "${{ inputs.device }}-${{ steps.prepare.outputs.build_number }}" \
             "${FILES[@]}" \
             -R "${{ inputs.upload_repository }}" \
-            --title "ROM for ${{ inputs.device }} (${{ steps.prepare.outputs.title_date }})" \
+            --title "${{ inputs.rom_manifest_branch }} for ${{ inputs.device }} (${{ steps.prepare.outputs.title_date }})" \
             --notes-file release_notes.md
 
       - name: Stop OUT runner
