@@ -1166,6 +1166,9 @@ jobs:
       - name: Build ROM
         if: inputs.role == 'main' || inputs.role == 'builder'
         shell: bash
+        env:
+          CUSTOM_ENV: ${{ inputs.custom_env }}
+          CUSTOM_COMMANDS: ${{ inputs.custom_commands }}
         run: |
           cd /storage/android-rom/rom
 
@@ -1187,14 +1190,14 @@ jobs:
                 echo "Using custom build identity."
               fi
 
-              if [ -n "${{ inputs.custom_env }}" ]; then
+              if [ -n "$CUSTOM_ENV" ]; then
                 echo "Applying custom environment variables: ${{ inputs.custom_env }}"
-                export ${{ inputs.custom_env }}
+                export "$CUSTOM_ENV"
               fi
 
-              if [ -n "${{ inputs.custom_commands }}" ]; then
+              if [ -n "$CUSTOM_COMMANDS" ]; then
                 echo "=== RUNNING CUSTOM COMMANDS ==="
-                eval "${{ inputs.custom_commands }}"
+                eval "$CUSTOM_COMMANDS"
                 echo "==============================="
               fi
 
