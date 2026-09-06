@@ -1209,7 +1209,7 @@ jobs:
               
               export DEVICE='${{ inputs.device }}'
               export BUILD_TYPE='${{ inputs.build_type }}'
-              export BUILD_COMMAND='$BUILD_COMMAND_INPUT'
+              export BUILD_COMMAND="$BUILD_COMMAND_INPUT"
 
               echo "=== STARTING ROM BUILD ==="
 
