@@ -377,42 +377,6 @@ jobs:
           echo "ROM IMAGE READY"
           echo "=========================================="
 
-      - name: Setup ROM NBD server
-        if: inputs.role == 'main'
-        shell: bash
-        run: |
-          set -e
-
-          ROM_IMG="/storage/android-rom/rom.img"
-
-          sudo modprobe nbd max_part=8
-
-
-          sudo tee /etc/nbd-server/config >/dev/null <<EOF
-          [generic]
-              user = runner
-              group = runner
-              listenaddr = 0.0.0.0
-
-          [android-rom]
-              exportname = $ROM_IMG
-              flush = true
-              trim = true
-          EOF
-
-          sudo pkill nbd-server 2>/dev/null || true
-
-          sudo nbd-server \
-            -C /etc/nbd-server/config
-
-          sleep 3
-
-          echo "=== ROM NBD server ==="
-
-          sudo ss -lntp | grep 10809 || true
-
-          echo "ROM export ready"
-
       - name: Initialize source
         if: inputs.role == 'main'
         run: |
@@ -1149,6 +1113,42 @@ jobs:
           echo
           echo "ROM filesystem:"
           df -h /storage/android-rom/rom
+
+      - name: Setup ROM NBD server
+        if: inputs.role == 'main' || inputs.role == 'builder'
+        shell: bash
+        run: |
+          set -e
+
+          ROM_IMG="/storage/android-rom/rom.img"
+
+          sudo modprobe nbd max_part=8
+
+
+          sudo tee /etc/nbd-server/config >/dev/null <<EOF
+          [generic]
+              user = runner
+              group = runner
+              listenaddr = 0.0.0.0
+
+          [android-rom]
+              exportname = $ROM_IMG
+              flush = true
+              trim = true
+          EOF
+
+          sudo pkill nbd-server 2>/dev/null || true
+
+          sudo nbd-server \
+            -C /etc/nbd-server/config
+
+          sleep 3
+
+          echo "=== ROM NBD server ==="
+
+          sudo ss -lntp | grep 10809 || true
+
+          echo "ROM export ready"
 
       - name: Builder - Connect to OUT storage
         if: inputs.role == 'builder'
