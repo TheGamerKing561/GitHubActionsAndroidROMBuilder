@@ -154,6 +154,7 @@ jobs:
             build-essential \
             ccache \
             curl \
+            erofs-utils \
             flex \
             g++-multilib \
             gcc-multilib \
